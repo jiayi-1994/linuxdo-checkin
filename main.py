@@ -189,7 +189,7 @@ class LinuxDoBrowser:
     def click_topic(self):
         topic_list = self.page.ele("@id=list-area").eles(".:title")
         logger.info(f"发现 {len(topic_list)} 个主题帖，随机选择10个")
-        for topic in random.sample(topic_list, 10):
+        for topic in random.sample(topic_list, 100):
             self.click_one_topic(topic.attr("href"))
 
     @retry_decorator()
