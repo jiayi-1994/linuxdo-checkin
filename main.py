@@ -144,6 +144,8 @@ class LinuxDoBrowser:
             logger.error(f"登录请求异常: {e}")
             return False
 
+        self.print_connect_info()  # 打印连接信息
+
         # Step 3: Pass cookies to DrissionPage
         logger.info("同步 Cookie 到 DrissionPage...")
 
@@ -188,9 +190,13 @@ class LinuxDoBrowser:
 
     def click_topic(self):
         topic_list = self.page.ele("@id=list-area").eles(".:title")
+        if not topic_list:
+            logger.error("未找到主题帖")
+            return False
         logger.info(f"发现 {len(topic_list)} 个主题帖，随机选择10个")
         for topic in random.sample(topic_list, 100):
             self.click_one_topic(topic.attr("href"))
+        return True
 
     @retry_decorator()
     def click_one_topic(self, topic_url):
@@ -232,14 +238,15 @@ class LinuxDoBrowser:
             time.sleep(wait_time)
 
     def run(self):
-        if not self.login():  # 登录
-            logger.error("登录失败，程序终止")
-            sys.exit(1)  # 使用非零退出码终止整个程序
-            
-        self.print_connect_info()  # 打印连接信息
+        login_res = self.login()
+        if not login_res:  # 登录
+            logger.warning("登录验证失败")
 
         if BROWSE_ENABLED:
-            self.click_topic()  # 点击主题
+            click_topic_res = self.click_topic()  # 点击主题
+            if not click_topic_res:
+                logger.error("点击主题失败，程序终止")
+                return
             logger.info("完成浏览任务")
 
         self.send_notifications(BROWSE_ENABLED)  # 发送通知
@@ -262,7 +269,12 @@ class LinuxDoBrowser:
 
     def print_connect_info(self):
         logger.info("获取连接信息")
-        resp = self.session.get("https://connect.linux.do/", impersonate="chrome136")
+        headers = {
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+        }
+        resp = self.session.get(
+            "https://connect.linux.do/", headers=headers, impersonate="chrome136"
+        )
         soup = BeautifulSoup(resp.text, "html.parser")
         rows = soup.select("table tr")
         info = []
