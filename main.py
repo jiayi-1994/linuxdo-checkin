@@ -16,7 +16,7 @@ from curl_cffi import requests
 from bs4 import BeautifulSoup
 
 
-def retry_decorator(retries=3):
+def retry_decorator(retries=3, min_delay=5, max_delay=10):
     def decorator(func):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
@@ -29,7 +29,12 @@ def retry_decorator(retries=3):
                     logger.warning(
                         f"函数 {func.__name__} 第 {attempt + 1}/{retries} 次尝试失败: {str(e)}"
                     )
-                    time.sleep(1)
+                    if attempt < retries - 1:
+                        sleep_s = random.uniform(min_delay, max_delay)
+                        logger.info(
+                            f"将在 {sleep_s:.2f}s 后重试 ({min_delay}-{max_delay}s 随机延迟)"
+                        )
+                        time.sleep(sleep_s)
             return None
 
         return wrapper
@@ -54,6 +59,8 @@ if not PASSWORD:
 GOTIFY_URL = os.environ.get("GOTIFY_URL")  # Gotify 服务器地址
 GOTIFY_TOKEN = os.environ.get("GOTIFY_TOKEN")  # Gotify 应用的 API Token
 SC3_PUSH_KEY = os.environ.get("SC3_PUSH_KEY")  # Server酱³ SendKey
+WXPUSH_URL = os.environ.get("WXPUSH_URL")  # wxpush 服务器地址
+WXPUSH_TOKEN = os.environ.get("WXPUSH_TOKEN")  # wxpush 的 token
 
 HOME_URL = "https://linux.do/"
 LOGIN_URL = "https://linux.do/login"
@@ -71,6 +78,8 @@ class LinuxDoBrowser:
             platformIdentifier = "Macintosh; Intel Mac OS X 10_15_7"
         elif platform == "win32":
             platformIdentifier = "Windows NT 10.0; Win64; x64"
+        else:
+            platformIdentifier = "X11; Linux x86_64"
 
         co = (
             ChromiumOptions()
@@ -176,7 +185,11 @@ class LinuxDoBrowser:
         self.page.get(HOME_URL)
 
         time.sleep(5)
-        user_ele = self.page.ele("@id=current-user")
+        try:
+            user_ele = self.page.ele("@id=current-user")
+        except Exception as e:
+            logger.warning(f"登录验证失败: {str(e)}")
+            return True
         if not user_ele:
             # Fallback check for avatar
             if "avatar" in self.page.html:
@@ -201,11 +214,16 @@ class LinuxDoBrowser:
     @retry_decorator()
     def click_one_topic(self, topic_url):
         new_page = self.browser.new_tab()
-        new_page.get(topic_url)
-        if random.random() < 0.3:  # 0.3 * 30 = 9
-            self.click_like(new_page)
-        self.browse_post(new_page)
-        new_page.close()
+        try:
+            new_page.get(topic_url)
+            if random.random() < 0.3:  # 0.3 * 30 = 9
+                self.click_like(new_page)
+            self.browse_post(new_page)
+        finally:
+            try:
+                new_page.close()
+            except Exception:
+                pass
 
     def browse_post(self, page):
         prev_url = None
@@ -238,20 +256,28 @@ class LinuxDoBrowser:
             time.sleep(wait_time)
 
     def run(self):
-        login_res = self.login()
-        if not login_res:  # 登录
-            logger.warning("登录验证失败")
+        try:
+            login_res = self.login()
+            if not login_res:  # 登录
+                logger.warning("登录验证失败")
 
-        if BROWSE_ENABLED:
-            click_topic_res = self.click_topic()  # 点击主题
-            if not click_topic_res:
-                logger.error("点击主题失败，程序终止")
-                return
-            logger.info("完成浏览任务")
+            if BROWSE_ENABLED:
+                click_topic_res = self.click_topic()  # 点击主题
+                if not click_topic_res:
+                    logger.error("点击主题失败，程序终止")
+                    return
+                logger.info("完成浏览任务")
 
-        self.send_notifications(BROWSE_ENABLED)  # 发送通知
-        self.page.close()
-        self.browser.quit()
+            self.send_notifications(BROWSE_ENABLED)  # 发送通知
+        finally:
+            try:
+                self.page.close()
+            except Exception:
+                pass
+            try:
+                self.browser.quit()
+            except Exception:
+                pass
 
     def click_like(self, page):
         try:
@@ -291,7 +317,7 @@ class LinuxDoBrowser:
         print(tabulate(info, headers=["项目", "当前", "要求"], tablefmt="pretty"))
 
     def send_notifications(self, browse_enabled):
-        status_msg = "✅每日登录成功"
+        status_msg = f"✅每日登录成功: {USERNAME}"
         if browse_enabled:
             status_msg += " + 浏览任务完成"
 
@@ -335,6 +361,24 @@ class LinuxDoBrowser:
                         sleep_time = random.randint(180, 360)
                         logger.info(f"将在 {sleep_time} 秒后重试...")
                         time.sleep(sleep_time)
+
+        if WXPUSH_URL and WXPUSH_TOKEN:
+            try:
+                response = requests.post(
+                    f"{WXPUSH_URL}/wxsend",
+                    headers={
+                        "Authorization": WXPUSH_TOKEN,
+                        "Content-Type": "application/json",
+                    },
+                    json={"title": "LINUX DO", "content": status_msg},
+                    timeout=10,
+                )
+                response.raise_for_status()
+                logger.success(f"wxpush 推送成功: {response.text}")
+            except Exception as e:
+                logger.error(f"wxpush 推送失败: {str(e)}")
+        else:
+            logger.info("未配置 WXPUSH_URL 或 WXPUSH_TOKEN，跳过通知发送")
 
 
 if __name__ == "__main__":
