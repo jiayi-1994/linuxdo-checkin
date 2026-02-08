@@ -7,13 +7,12 @@ import os
 import random
 import time
 import functools
-import sys
-import re
 from loguru import logger
 from DrissionPage import ChromiumOptions, Chromium
 from tabulate import tabulate
 from curl_cffi import requests
 from bs4 import BeautifulSoup
+from notify import NotificationManager
 
 
 def retry_decorator(retries=3, min_delay=5, max_delay=10):
@@ -56,11 +55,6 @@ if not USERNAME:
     USERNAME = os.environ.get("USERNAME")
 if not PASSWORD:
     PASSWORD = os.environ.get("PASSWORD")
-GOTIFY_URL = os.environ.get("GOTIFY_URL")  # Gotify 服务器地址
-GOTIFY_TOKEN = os.environ.get("GOTIFY_TOKEN")  # Gotify 应用的 API Token
-SC3_PUSH_KEY = os.environ.get("SC3_PUSH_KEY")  # Server酱³ SendKey
-WXPUSH_URL = os.environ.get("WXPUSH_URL")  # wxpush 服务器地址
-WXPUSH_TOKEN = os.environ.get("WXPUSH_TOKEN")  # wxpush 的 token
 
 HOME_URL = "https://linux.do/"
 LOGIN_URL = "https://linux.do/login"
@@ -100,6 +94,8 @@ class LinuxDoBrowser:
                 "Accept-Language": "zh-CN,zh;q=0.9",
             }
         )
+        # 初始化通知管理器
+        self.notifier = NotificationManager()
 
     def login(self):
         logger.info("开始登录")
@@ -112,7 +108,10 @@ class LinuxDoBrowser:
             "X-Requested-With": "XMLHttpRequest",
             "Referer": LOGIN_URL,
         }
-        resp_csrf = self.session.get(CSRF_URL, headers=headers, impersonate="chrome136")
+        resp_csrf = self.session.get(CSRF_URL, headers=headers, impersonate="firefox135")
+        if resp_csrf.status_code != 200:
+            logger.error(f"获取 CSRF token 失败: {resp_csrf.status_code}")
+            return False        
         csrf_data = resp_csrf.json()
         csrf_token = csrf_data.get("csrf")
         logger.info(f"CSRF Token obtained: {csrf_token[:10]}...")
@@ -317,73 +316,18 @@ class LinuxDoBrowser:
         print(tabulate(info, headers=["项目", "当前", "要求"], tablefmt="pretty"))
 
     def send_notifications(self, browse_enabled):
+        """发送签到通知"""
         status_msg = f"✅每日登录成功: {USERNAME}"
         if browse_enabled:
             status_msg += " + 浏览任务完成"
-
-        if GOTIFY_URL and GOTIFY_TOKEN:
-            try:
-                response = requests.post(
-                    f"{GOTIFY_URL}/message",
-                    params={"token": GOTIFY_TOKEN},
-                    json={"title": "LINUX DO", "message": status_msg, "priority": 1},
-                    timeout=10,
-                )
-                response.raise_for_status()
-                logger.success("消息已推送至Gotify")
-            except Exception as e:
-                logger.error(f"Gotify推送失败: {str(e)}")
-        else:
-            logger.info("未配置Gotify环境变量，跳过通知发送")
-
-        if SC3_PUSH_KEY:
-            match = re.match(r"sct(\d+)t", SC3_PUSH_KEY, re.I)
-            if not match:
-                logger.error(
-                    "❌ SC3_PUSH_KEY格式错误，未获取到UID，无法使用Server酱³推送"
-                )
-                return
-
-            uid = match.group(1)
-            url = f"https://{uid}.push.ft07.com/send/{SC3_PUSH_KEY}"
-            params = {"title": "LINUX DO", "desp": status_msg}
-
-            attempts = 5
-            for attempt in range(attempts):
-                try:
-                    response = requests.get(url, params=params, timeout=10)
-                    response.raise_for_status()
-                    logger.success(f"Server酱³推送成功: {response.text}")
-                    break
-                except Exception as e:
-                    logger.error(f"Server酱³推送失败: {str(e)}")
-                    if attempt < attempts - 1:
-                        sleep_time = random.randint(180, 360)
-                        logger.info(f"将在 {sleep_time} 秒后重试...")
-                        time.sleep(sleep_time)
-
-        if WXPUSH_URL and WXPUSH_TOKEN:
-            try:
-                response = requests.post(
-                    f"{WXPUSH_URL}/wxsend",
-                    headers={
-                        "Authorization": WXPUSH_TOKEN,
-                        "Content-Type": "application/json",
-                    },
-                    json={"title": "LINUX DO", "content": status_msg},
-                    timeout=10,
-                )
-                response.raise_for_status()
-                logger.success(f"wxpush 推送成功: {response.text}")
-            except Exception as e:
-                logger.error(f"wxpush 推送失败: {str(e)}")
-        else:
-            logger.info("未配置 WXPUSH_URL 或 WXPUSH_TOKEN，跳过通知发送")
+        
+        # 使用通知管理器发送所有通知
+        self.notifier.send_all("LINUX DO", status_msg)
 
 
 if __name__ == "__main__":
     if not USERNAME or not PASSWORD:
         print("Please set USERNAME and PASSWORD")
         exit(1)
-    l = LinuxDoBrowser()
-    l.run()
+    browser = LinuxDoBrowser()
+    browser.run()
