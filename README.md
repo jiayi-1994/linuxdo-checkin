@@ -1,3 +1,7 @@
+# 公告
+
+请不要魔改本项目多线程刷论坛，本项目的初衷只是为了给个人账号刷一下访问天数的，不是给号商养号用的。
+
 # LinuxDo 每日签到（每日打卡）
 
 ## 项目描述
@@ -19,27 +23,39 @@
 - (可选)`wxpush`通知功能，推送获取签到结果。
 ## 环境变量配置
 
-### 必填变量
+### 登录方式（二选一）
+
+**方式一：Cookie 登录（优先）**
+
+| 环境变量名称             | 描述                                         | 示例值                          |
+|--------------------|--------------------------------------------|------------------------------|
+| `LINUXDO_COOKIES`  | 从浏览器 DevTools 复制的 Cookie 字符串，设置后优先使用，无需账号密码 | `_t=xxx; _forum_session=yyy` |
+
+> 获取方式：打开 [linux.do](https://linux.do/) 并登录 → 按 F12 → Application → Cookies → `https://linux.do` → 全选所有 Cookie 复制为字符串粘贴即可。
+
+**方式二：账号密码登录**
 
 | 环境变量名称             | 描述                | 示例值                                |
 |--------------------|-------------------|------------------------------------|
 | `LINUXDO_USERNAME` | 你的 LinuxDo 用户名或邮箱 | `your_username` 或 `your@email.com` |
 | `LINUXDO_PASSWORD` | 你的 LinuxDo 密码     | `your_password`                    |
 
+> 若同时设置了 `LINUXDO_COOKIES` 和账号密码，**Cookie 登录优先**；Cookie 失效时自动回退到账号密码登录。
+
 ~~之前的USERNAME和PASSWORD环境变量仍然可用，但建议使用新的环境变量~~
 
 ### 可选变量
 
-| 环境变量名称            | 描述                   | 示例值                                    |
-|-------------------|----------------------|----------------------------------------|
-| `GOTIFY_URL`      | Gotify 服务器地址         | `https://your.gotify.server:8080`      |
-| `GOTIFY_TOKEN`    | Gotify 应用的 API Token | `your_application_token`               |
-| `TELEGRAM_BOT_TOKEN`  | Telegram Bot Token   | `123456789:ABCdefghijklmnopqrstuvwxyz` |
-| `TELEGRAM_CHAT_ID` | Telegram 用户 ID       | `123456789`                            |
-| `SC3_PUSH_KEY`    | Server酱³ SendKey     | `sctpxxxxt`                             |
-| `WXPUSH_URL`      | wxpush 服务器地址         | `https://your.wxpush.server`           |
-| `WXPUSH_TOKEN`    | wxpush 的 token        | `your_wxpush_token`                    |
-| `BROWSE_ENABLED`  | 是否启用浏览帖子功能        | `true` 或 `false`，默认为 `true`           |
+| 环境变量名称                | 描述                   | 示例值                                    |
+|----------------------|----------------------|----------------------------------------|
+| `GOTIFY_URL`         | Gotify 服务器地址         | `https://your.gotify.server:8080`      |
+| `GOTIFY_TOKEN`       | Gotify 应用的 API Token | `your_application_token`               |
+| `TELEGRAM_BOT_TOKEN` | Telegram Bot Token   | `123456789:ABCdefghijklmnopqrstuvwxyz` |
+| `TELEGRAM_CHAT_ID`   | Telegram 用户 ID       | `123456789`                            |
+| `SC3_PUSH_KEY`       | Server酱³ SendKey     | `sctpxxxxt`                            |
+| `WXPUSH_URL`         | wxpush 服务器地址         | `https://your.wxpush.server`           |
+| `WXPUSH_TOKEN`       | wxpush 的 token       | `your_wxpush_token`                    |
+| `BROWSE_ENABLED`     | 是否启用浏览帖子功能           | `true` 或 `false`，默认为 `true`           |
 
 ---
 
@@ -53,8 +69,8 @@
 
 1. **设置环境变量**：
     - 在 GitHub 仓库的 `Settings` -> `Secrets and variables` -> `Actions` 中添加以下变量：
-        - `LINUXDO_USERNAME`：你的 LinuxDo 用户名或邮箱。
-        - `LINUXDO_PASSWORD`：你的 LinuxDo 密码。
+        - （二选一）`LINUXDO_COOKIES`：从浏览器复制的 Cookie 字符串（**推荐，优先使用**）。
+        - （二选一）`LINUXDO_USERNAME` + `LINUXDO_PASSWORD`：你的 LinuxDo 用户名/邮箱和密码。
         - (可选) `BROWSE_ENABLED`：是否启用浏览帖子，`true` 或 `false`，默认为 `true`。
         - (可选) `GOTIFY_URL` 和 `GOTIFY_TOKEN`。
         - (可选) `SC3_PUSH_KEY`。
@@ -115,8 +131,9 @@
 3. **配置环境变量**
     - 进入青龙面板 -> 环境变量 -> 创建变量
     - 需要配置以下变量：
-        - `LINUXDO_USERNAME`：你的LinuxDo用户名/邮箱
-        - `LINUXDO_PASSWORD`：你的LinuxDo密码
+        - （二选一）`LINUXDO_COOKIES`：从浏览器复制的 Cookie 字符串（**推荐，优先使用**）
+        - （二选一）`LINUXDO_USERNAME`：你的LinuxDo用户名/邮箱
+        - （二选一）`LINUXDO_PASSWORD`：你的LinuxDo密码
         - (可选) `BROWSE_ENABLED`：是否启用浏览帖子功能，`true` 或 `false`，默认为 `true`
         - (可选) `GOTIFY_URL`：Gotify服务器地址
         - (可选) `GOTIFY_TOKEN`：Gotify应用Token

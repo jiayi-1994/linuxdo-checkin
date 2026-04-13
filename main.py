@@ -46,6 +46,7 @@ os.environ.pop("DYLD_LIBRARY_PATH", None)
 
 USERNAME = os.environ.get("LINUXDO_USERNAME")
 PASSWORD = os.environ.get("LINUXDO_PASSWORD")
+COOKIES = os.environ.get("LINUXDO_COOKIES", "").strip()  # 手动设置的 Cookie 字符串，优先使用
 BROWSE_ENABLED = os.environ.get("BROWSE_ENABLED", "true").strip().lower() not in [
     "false",
     "0",
@@ -97,8 +98,65 @@ class LinuxDoBrowser:
         # 初始化通知管理器
         self.notifier = NotificationManager()
 
+    @staticmethod
+    def parse_cookie_string(cookie_str: str) -> list[dict]:
+        """
+        解析浏览器复制的 Cookie 字符串格式: "name1=value1; name2=value2"
+        返回 DrissionPage 所需的 cookie 列表格式。
+        """
+        cookies = []
+        for part in cookie_str.strip().split(";"):
+            part = part.strip()
+            if "=" in part:
+                name, _, value = part.partition("=")
+                cookies.append(
+                    {
+                        "name": name.strip(),
+                        "value": value.strip(),
+                        "domain": ".linux.do",
+                        "path": "/",
+                    }
+                )
+        return cookies
+
+    def login_with_cookies(self, cookie_str: str) -> bool:
+        """使用手动设置的 Cookie 直接登录，跳过账号密码流程"""
+        logger.info("检测到手动 Cookie，尝试 Cookie 登录...")
+        dp_cookies = self.parse_cookie_string(cookie_str)
+        if not dp_cookies:
+            logger.error("Cookie 解析失败或为空，无法使用 Cookie 登录")
+            return False
+
+        logger.info(f"成功解析 {len(dp_cookies)} 个 Cookie 条目")
+
+        # 同步到 requests.Session，以便后续 API 请求（如 print_connect_info）使用
+        for ck in dp_cookies:
+            self.session.cookies.set(ck["name"], ck["value"], domain="linux.do")
+
+        # 同步到 DrissionPage
+        self.page.set.cookies(dp_cookies)
+        logger.info("Cookie 设置完成，导航至 linux.do...")
+        self.page.get(HOME_URL)
+        time.sleep(5)
+
+        # 验证登录状态
+        try:
+            user_ele = self.page.ele("@id=current-user")
+        except Exception as e:
+            logger.warning(f"Cookie 登录验证异常: {str(e)}")
+            return True
+        if not user_ele:
+            if "avatar" in self.page.html:
+                logger.info("Cookie 登录验证成功 (通过 avatar)")
+                return True
+            logger.error("Cookie 登录验证失败 (未找到 current-user)，Cookie 可能已过期")
+            return False
+        else:
+            logger.info("Cookie 登录验证成功")
+            return True
+
     def login(self):
-        logger.info("开始登录")
+        logger.info("开始账号密码登录")
         # Step 1: Get CSRF Token
         logger.info("获取 CSRF token...")
         headers = {
@@ -152,18 +210,8 @@ class LinuxDoBrowser:
             logger.error(f"登录请求异常: {e}")
             return False
 
-        self.print_connect_info()  # 打印连接信息
-
         # Step 3: Pass cookies to DrissionPage
         logger.info("同步 Cookie 到 DrissionPage...")
-
-        # Convert requests cookies to DrissionPage format
-        # Using standard requests.utils to parse cookiejar if possible, or manual extraction
-        # requests.Session().cookies is a specialized object, but might support standard iteration
-
-        # We can iterate over the cookies manually if dict_from_cookiejar doesn't work perfectly
-        # or convert to dict first.
-        # Assuming requests behaves like requests:
 
         cookies_dict = self.session.cookies.get_dict()
 
@@ -256,7 +304,14 @@ class LinuxDoBrowser:
 
     def run(self):
         try:
-            login_res = self.login()
+            # 优先使用手动 Cookie 登录，没有再使用账号密码
+            if COOKIES:
+                login_res = self.login_with_cookies(COOKIES)
+                if not login_res:
+                    logger.warning("Cookie 登录失败，尝试账号密码登录...")
+                    login_res = self.login()
+            else:
+                login_res = self.login()
             if not login_res:  # 登录
                 logger.warning("登录验证失败")
 
@@ -266,7 +321,7 @@ class LinuxDoBrowser:
                     logger.error("点击主题失败，程序终止")
                     return
                 logger.info("完成浏览任务")
-
+            self.print_connect_info()  # 打印连接信息
             self.send_notifications(BROWSE_ENABLED)  # 发送通知
         finally:
             try:
@@ -312,8 +367,8 @@ class LinuxDoBrowser:
                 requirement = cells[2].text.strip() if cells[2].text.strip() else "0"
                 info.append([project, current, requirement])
 
-        print("--------------Connect Info-----------------")
-        print(tabulate(info, headers=["项目", "当前", "要求"], tablefmt="pretty"))
+        logger.info("--------------Connect Info-----------------")
+        logger.info("\n" + tabulate(info, headers=["项目", "当前", "要求"], tablefmt="pretty"))
 
     def send_notifications(self, browse_enabled):
         """发送签到通知"""
@@ -326,8 +381,8 @@ class LinuxDoBrowser:
 
 
 if __name__ == "__main__":
-    if not USERNAME or not PASSWORD:
-        print("Please set USERNAME and PASSWORD")
+    if not COOKIES and (not USERNAME or not PASSWORD):
+        print("请设置 LINUXDO_COOKIES（Cookie 登录），或同时设置 USERNAME 和 PASSWORD（账号密码登录）")
         exit(1)
     browser = LinuxDoBrowser()
     browser.run()
