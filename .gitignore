@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# venv
+venv/
+env/
+.venv/
+
+# macOS
+.DS_Store
+
+# 临时脚本（不上仓）
+get_connect.py
+run_with_cookiecloud.sh
+run_with_retry.sh

@@ -1,0 +1,42 @@
+name: LinuxDo Daily Check-in
+
+on:
+  schedule:
+    # 北京时间 18:00 = UTC 10:00
+    - cron: "0 10 * * *"
+  workflow_dispatch:  # 允许手动触发测试
+
+jobs:
+  checkin:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # 安装上游依赖 (DrissionPage 4.x 自带 Chromium)
+          pip install -r requirements.txt
+          pip install pycryptodome
+      
+      - name: Install Chromium for DrissionPage
+        run: |
+          # DrissionPage 4.x 内部用 Playwright 协议, 直接装 playwright 的 Chromium 内核
+          pip install playwright
+          python -m playwright install chromium
+          python -m playwright install-deps chromium
+      
+      - name: Run check-in
+        env:
+          LINUXDO_COOKIES: ${{ secrets.LINUXDO_COOKIES }}
+          BROWSE_ENABLED: "true"
+        run: |
+          python main.py
